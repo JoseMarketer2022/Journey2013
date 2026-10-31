@@ -26,30 +26,125 @@ import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.graphics.Color
+import android.os.Build
+import android.view.Gravity
+import android.webkit.RenderProcessGoneDetail
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.view.View
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.widget.FrameLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 class MainActivity : Activity() {
-    private lateinit var web: WebView
+    private var web: WebView? = null
     private val ui = Handler(Looper.getMainLooper())
     private var lastTitle = ""
     private val poll = object : Runnable {
         override fun run() { pushMedia(); ui.postDelayed(this, 1000) }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        web = WebView(this)
-        web.setBackgroundColor(0xFF03060D.toInt())
-        web.settings.javaScriptEnabled = true
-        web.settings.domStorageEnabled = true
-        web.webViewClient = WebViewClient()
-        web.addJavascriptInterface(Bridge(), "Android")
-        setContentView(web)
-        web.loadUrl("file:///android_asset/index.html")
+        try { startWeb() } catch (t: Throwable) { showError("No se pudo iniciar el WebView:\n" + t.message) }
         requestLocation()
+    }
+
+    private var status: TextView? = null
+    private var loaded = false
+    private var hadError = false
+    private val logLines = ArrayList<String>()
+
+    private fun say(t: String) {
+        runOnUiThread {
+            logLines.add(t)
+            while (logLines.size > 7) logLines.removeAt(0)
+            status?.text = logLines.joinToString("\n") + "\n[toca aqui para cambiar el modo de dibujo]"
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun startWeb() {
+        val prefs = getSharedPreferences("j", MODE_PRIVATE)
+        val sw = prefs.getBoolean("sw", true)
+        val w = WebView(this)
+        w.setBackgroundColor(0xFF03060D.toInt())
+        w.settings.javaScriptEnabled = true
+        w.settings.domStorageEnabled = true
+        if (sw) w.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        w.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(m: ConsoleMessage?): Boolean {
+                if (m != null && m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) { hadError = true; say("JS: " + m.message()) }
+                return true
+            }
+        }
+        w.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                loaded = true
+                say("Pagina cargada")
+                ui.postDelayed({ if (!hadError) status?.visibility = View.GONE }, 20000)
+            }
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame == true) { hadError = true; say("Error: " + error?.description) }
+            }
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                web = null
+                showError("El WebView se cerro inesperadamente.")
+                return true
+            }
+        }
+        w.addJavascriptInterface(Bridge(), "Android")
+        val root = FrameLayout(this)
+        root.setBackgroundColor(0xFF03060D.toInt())
+        root.addView(w, FrameLayout.LayoutParams(-1, -1))
+        val st = TextView(this)
+        st.setTextColor(Color.YELLOW)
+        st.setBackgroundColor(0xAA000000.toInt())
+        st.textSize = 14f
+        st.setPadding(16, 8, 16, 8)
+        st.setOnClickListener { prefs.edit().putBoolean("sw", !sw).apply(); recreate() }
+        root.addView(st, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START))
+        status = st
+        setContentView(root)
+        web = w
+        say("Journey OS 0.2 - dibujo: " + (if (sw) "software" else "hardware"))
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val pk = WebView.getCurrentWebViewPackage()
+                say("WebView: " + (pk?.packageName ?: "?") + " " + (pk?.versionName ?: "?"))
+            } catch (t: Throwable) { say("WebView: sin datos") }
+        } else say("Android " + Build.VERSION.SDK_INT)
+        say("Cargando pagina...")
+        w.loadUrl("file:///android_asset/index.html")
+        ui.postDelayed({ if (!loaded) say("La pagina NO termino de cargar") }, 8000)
+    }
+
+    private fun showError(msg: String) {
+        val l = LinearLayout(this)
+        l.orientation = LinearLayout.VERTICAL
+        l.gravity = Gravity.CENTER
+        l.setBackgroundColor(Color.parseColor("#03060D"))
+        l.setPadding(60, 60, 60, 60)
+        val t = TextView(this)
+        t.text = "Journey OS\n\n" + msg
+        t.setTextColor(Color.WHITE)
+        t.textSize = 22f
+        t.gravity = Gravity.CENTER
+        l.addView(t)
+        fun btn(txt: String, a: () -> Unit) {
+            val b = Button(this); b.text = txt; b.setOnClickListener { a() }; l.addView(b)
+        }
+        btn("Reintentar") { recreate() }
+        btn("Ajustes de Android") { launch(Intent(Settings.ACTION_SETTINGS)) }
+        btn("Cambiar pantalla de inicio") { launch(Intent(Settings.ACTION_HOME_SETTINGS)) }
+        setContentView(l)
     }
 
     override fun onResume() { super.onResume(); ui.post(poll) }
@@ -58,7 +153,7 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { js("window.onBack&&onBack()") }
 
-    private fun js(s: String) { runOnUiThread { web.evaluateJavascript(s, null) } }
+    private fun js(s: String) { runOnUiThread { web?.evaluateJavascript(s, null) } }
 
     // ---------- GPS / velocidad ----------
     private fun requestLocation() {
