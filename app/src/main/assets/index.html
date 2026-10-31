@@ -3,7 +3,7 @@
 :root{color-scheme:dark;--card:#0c1a30cc;--ln:#244d86;--ac:#2aa3ff;--red:#e0192b}
 *{box-sizing:border-box;margin:0}html,body{height:100%;background:#03060d}
 body{display:flex;justify-content:center;align-items:center;overflow:hidden;color:#eef5ff;font-family:system-ui,Segoe UI,Roboto,sans-serif}
-.s{position:relative;width:min(100vw,177.78vh);aspect-ratio:16/9;font-size:min(1vw,1.7778vh);background:radial-gradient(ellipse at 35% 45%,#12305a,#050a15 70%);overflow:hidden}
+.s{position:relative;width:100vw;height:56.25vw;font-size:1vw;background:radial-gradient(ellipse at 35% 45%,#12305a,#050a15 70%);overflow:hidden}
 .s>*{position:absolute}
 a{color:inherit;text-decoration:none}
 .top{left:0;right:0;top:0;height:2.95em;display:flex;align-items:center;justify-content:space-between;padding:0 1.36em;font-size:2.2em}
@@ -33,7 +33,7 @@ a{color:inherit;text-decoration:none}
 .spw{left:66.2em;top:50.2em}
 .toast{left:50%;bottom:2em;transform:translateX(-50%);background:#000c;border:1px solid var(--ln);padding:.8em 1.6em;border-radius:2em;font-size:2em;opacity:0;transition:.3s;z-index:9;white-space:nowrap}.toast.on{opacity:1}
 svg{width:1em;height:1em;fill:currentColor;display:block}.rail svg{width:.85em;height:.85em}.zl i svg{width:.85em;height:.85em}.g i svg{width:1.1em;height:1.1em}.mu button{display:flex;align-items:center;justify-content:center}.mu .p svg{width:.7em;height:.7em}.mu .t{min-width:0;overflow:hidden}.mu b,.mu .t span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mu b{font-size:2.2em}
-#ap{position:fixed;inset:0;z-index:20;background:#03060df2;flex-direction:column;padding:2vh 3vw}.aph{display:flex;justify-content:space-between;align-items:center;font-size:3.4vh;margin-bottom:2vh}.aph button{background:none;border:1px solid #244d86;color:#fff;border-radius:1em;font-size:3vh;padding:.3em .9em}
+#ap{position:fixed;top:0;left:0;right:0;bottom:0;z-index:20;background:#03060df2;flex-direction:column;padding:2vh 3vw}.aph{display:flex;justify-content:space-between;align-items:center;font-size:3.4vh;margin-bottom:2vh}.aph button{background:none;border:1px solid #244d86;color:#fff;border-radius:1em;font-size:3vh;padding:.3em .9em}
 #apg{display:grid;grid-template-columns:repeat(auto-fill,minmax(14vh,1fr));gap:2vh;overflow-y:auto}#apg button{background:#0c1a30;border:1px solid #244d86;border-radius:2vh;color:#fff;padding:1.5vh;display:flex;flex-direction:column;align-items:center;gap:1vh;font-size:1.9vh}#apg img{width:7vh;height:7vh}#apg span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mu{gap:1.2em;padding:0 1.5em}.mu button{padding:0}.mu .p{width:2.1em;height:2.1em}</style></head><body><div class="s">
 <div class="top"><span style="display:flex;gap:1.1em"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round"><path d="M16 4 6 12l10 8z"/></svg><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round"><circle cx="12" cy="12" r="8"/></svg><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round"><rect x="4.5" y="4.5" width="15" height="15" rx="3.2"/></svg></span><span class="logo">DODGE <b>//</b></span><span id="h2"></span></div>
@@ -46,6 +46,7 @@ svg{width:1em;height:1em;fill:currentColor;display:block}.rail svg{width:.85em;h
 <div class="c mu"><img alt=""><div class="t"><b>Nuestra Canción</b><span>Morat</span><div class="bar"><u id="pg"></u></div></div><button><svg viewBox="0 0 24 24"><path d="M6 5h2.5v14H6zM20 5v14L9.5 12z"/></svg></button><button class="p" id="pp"><svg viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button><button><svg viewBox="0 0 24 24"><path d="M15.5 5H18v14h-2.5zM4 5l10.5 7L4 19z"/></svg></button><span class="dem">demo</span></div>
 <div class="c spd" style="left:66.2em;top:44.2em;width:32.6em;height:11em;display:flex;align-items:center;justify-content:center;gap:2em"><span style="font-size:4em;display:flex;width:1em"><svg viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 19a9 9 0 1 1 15 0"/><path d="M12 14l3-5.5"/></g><circle cx="12" cy="14" r="1.5" fill="#fff"/></svg></span><div><b id="v" style="font-size:6em;line-height:1">0</b><div style="font-size:2.2em;opacity:.8">km/h</div></div></div>
 <div class="toast" id="tt"></div></div>
+<script>function fit(){var w=window.innerWidth,hh=window.innerHeight,W=Math.min(w,hh*16/9),s=document.querySelector('.s');s.style.width=W+'px';s.style.height=(W*9/16)+'px';s.style.fontSize=(W/100)+'px'}fit();window.addEventListener('resize',fit);</script>
 <script>
 var $=function(i){return document.getElementById(i)};
 function tick(){var n=new Date(),t=n.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',hour12:false});
