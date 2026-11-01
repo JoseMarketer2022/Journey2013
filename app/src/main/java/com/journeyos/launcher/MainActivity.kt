@@ -39,6 +39,11 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.widget.FrameLayout
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.media.AudioManager
+import android.net.Uri
+import android.view.KeyEvent
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -47,6 +52,24 @@ class MainActivity : Activity() {
     private var web: WebView? = null
     private val ui = Handler(Looper.getMainLooper())
     private var lastTitle = ""
+    private var sTitle = ""
+    private var sArtist = ""
+    private var sLen = 0L
+    private var sPos = 0L
+    private var sPosAt = 0L
+    private var sPlaying = false
+    private var sSeen = false
+    private val spotify = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (i == null) return
+            i.getStringExtra("track")?.let { sTitle = it }
+            i.getStringExtra("artist")?.let { sArtist = it }
+            if (i.hasExtra("length")) sLen = i.getIntExtra("length", 0).toLong()
+            if (i.hasExtra("playing")) sPlaying = i.getBooleanExtra("playing", false)
+            if (i.hasExtra("playbackPosition")) { sPos = i.getIntExtra("playbackPosition", 0).toLong(); sPosAt = SystemClock.elapsedRealtime() }
+            sSeen = true
+        }
+    }
     private val poll = object : Runnable {
         override fun run() { pushMedia(); ui.postDelayed(this, 1000) }
     }
@@ -55,6 +78,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         try { startWeb() } catch (t: Throwable) { showError("No se pudo iniciar el WebView:\n" + t.message) }
         requestLocation()
+        registerSpotify()
     }
 
     private var status: TextView? = null
@@ -149,6 +173,7 @@ class MainActivity : Activity() {
 
     override fun onResume() { super.onResume(); ui.post(poll) }
     override fun onPause() { super.onPause(); ui.removeCallbacks(poll) }
+    override fun onDestroy() { super.onDestroy(); try { unregisterReceiver(spotify) } catch (t: Throwable) { } }
     override fun onNewIntent(intent: Intent?) { super.onNewIntent(intent); js("window.onBack&&onBack()") }
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { js("window.onBack&&onBack()") }
@@ -201,24 +226,57 @@ class MainActivity : Activity() {
         return "data:image/jpeg;base64," + Base64.encodeToString(o.toByteArray(), Base64.NO_WRAP)
     }
 
+    private fun registerSpotify() {
+        try {
+            val f = IntentFilter()
+            f.addAction("com.spotify.music.metadatachanged")
+            f.addAction("com.spotify.music.playbackstatechanged")
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(spotify, f, Context.RECEIVER_EXPORTED) else registerReceiver(spotify, f)
+        } catch (t: Throwable) { }
+    }
+
+    private fun key(code: Int) {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+            am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+        } catch (t: Throwable) { }
+    }
+
     private fun pushMedia() {
-        if (!hasAccess()) { js("window.onMedia&&onMedia({perm:false})"); return }
-        val c = controller()
-        if (c == null) { js("window.onMedia&&onMedia({perm:true,none:true})"); return }
-        val m = c.metadata
-        val s = c.playbackState
-        val title = m?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: ""
-        val playing = s?.state == PlaybackState.STATE_PLAYING
-        var pos = s?.position ?: 0L
-        if (playing && s != null) pos += ((SystemClock.elapsedRealtime() - s.lastPositionUpdateTime) * s.playbackSpeed).toLong()
+        val access = hasAccess()
+        val c = if (access) controller() else null
         val o = JSONObject()
-        o.put("perm", true)
-        o.put("title", title)
-        o.put("artist", m?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "")
-        o.put("dur", m?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L)
-        o.put("pos", pos)
-        o.put("playing", playing)
-        if (title != lastTitle) { lastTitle = title; o.put("art", artB64(m)) }
+        if (c != null) {
+            val m = c.metadata
+            val st = c.playbackState
+            val title = m?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: ""
+            val playing = st?.state == PlaybackState.STATE_PLAYING
+            var pos = st?.position ?: 0L
+            if (playing && st != null) pos += ((SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong()
+            o.put("perm", true)
+            o.put("title", title)
+            o.put("artist", m?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: "")
+            o.put("dur", m?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L)
+            o.put("pos", pos)
+            o.put("playing", playing)
+            if (title != lastTitle) { lastTitle = title; o.put("art", artB64(m)) }
+        } else if (sSeen && sTitle.isNotEmpty()) {
+            var pos = sPos
+            if (sPlaying) pos += SystemClock.elapsedRealtime() - sPosAt
+            o.put("perm", true)
+            o.put("title", sTitle)
+            o.put("artist", sArtist)
+            o.put("dur", sLen)
+            o.put("pos", pos)
+            o.put("playing", sPlaying)
+            if (sTitle != lastTitle) { lastTitle = sTitle; o.put("art", "") }
+        } else if (!access) {
+            o.put("perm", false)
+        } else {
+            o.put("perm", true)
+            o.put("none", true)
+        }
         js("window.onMedia&&onMedia($o)")
     }
 
@@ -255,7 +313,13 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun openDialer() { launch(Intent(Intent.ACTION_DIAL)) }
         @JavascriptInterface fun openSettings() { launch(Intent(Settings.ACTION_SETTINGS)) }
-        @JavascriptInterface fun openNotificationAccess() { launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        @JavascriptInterface fun openNotificationAccess(): Boolean {
+            if (launch(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))) return true
+            val comp = Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$NotificationAccessSettingsActivity"))
+            if (launch(comp)) return true
+            if (!launch(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + packageName)))) launch(Intent(Settings.ACTION_SETTINGS))
+            return false
+        }
 
         @JavascriptInterface fun getApps(): String {
             val arr = JSONArray()
@@ -269,10 +333,18 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface fun mediaToggle() {
-            val c = controller() ?: return
-            if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play()
+            val c = if (hasAccess()) controller() else null
+            if (c == null) key(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            else if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause()
+            else c.transportControls.play()
         }
-        @JavascriptInterface fun mediaNext() { controller()?.transportControls?.skipToNext() }
-        @JavascriptInterface fun mediaPrev() { controller()?.transportControls?.skipToPrevious() }
+        @JavascriptInterface fun mediaNext() {
+            val c = if (hasAccess()) controller() else null
+            if (c == null) key(KeyEvent.KEYCODE_MEDIA_NEXT) else c.transportControls.skipToNext()
+        }
+        @JavascriptInterface fun mediaPrev() {
+            val c = if (hasAccess()) controller() else null
+            if (c == null) key(KeyEvent.KEYCODE_MEDIA_PREVIOUS) else c.transportControls.skipToPrevious()
+        }
     }
 }
